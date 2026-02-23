@@ -6,7 +6,10 @@
 
   let { children } = $props();
 
-  const hideNavbar = ['/auth/login', '/auth/register'];
+
+ let hideNav = $derived(
+  ['/admin', '/auth'].some(p => page.url.pathname.startsWith(p))
+);
   const noWrapper = ['/terms', '/privacy', '/about'];
 </script>
 
@@ -14,7 +17,7 @@
   <link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if !hideNavbar.includes(page.url.pathname)}
+{#if !hideNav}
   <Navbar />
 {/if}
 
