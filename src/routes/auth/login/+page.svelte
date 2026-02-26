@@ -1,15 +1,58 @@
 <script>
+ import { supabase } from '$lib/supabase'
+import { goto } from '$app/navigation'
+
   let email = $state('');
   let password = $state('');
   let loading = $state(false);
+  let error= $state('');
 
   async function handleSubmit(e) {
-    e.preventDefault();
+    error='';
     loading = true;
     // TODO: connect Supabase auth here
-    await new Promise(r => setTimeout(r, 1500));
-    loading = false;
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (authError) {
+      error = authError.message
+      loading = false
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', authData.user.id)
+      .single()
+
+    if (profileError || !profile) {
+      error = 'Could not load your profile. Contact support.'
+      loading = false
+      return
+    }
+
+    if (profile.role === 'user') {
+      goto('/user/dashboard')
+    } else if (profile.role === 'operator') {
+      goto('/admin')
+    } else {
+      error = 'Unrecognized role. Contact support.'
+      loading = false
+    }
   }
+
+  async function handleGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`
+    }
+  })
+  if (error) console.error(error)
+}
 </script>
 
 <div class="min-h-screen bg-white flex items-center justify-center px-4 py-12">
@@ -61,9 +104,6 @@
         <div class="flex flex-col gap-1.5">
           <div class="flex items-center justify-between">
             <label class="text-sm font-medium text-base-content">Password</label>
-            <a href="/auth/forgot" class="text-xs text-primary hover:underline">
-              Forgot password?
-            </a>
           </div>
           <input
             type="password"
@@ -72,8 +112,10 @@
             class="input input-bordered w-full bg-white focus:input-primary text-sm"
             required
           />
+          <a href="/auth/forgot" class="text-xs text-primary hover:underline">
+              Forgot password?
+            </a>
         </div>
-
         <!-- Submit -->
         <button
           type="submit"
@@ -91,7 +133,7 @@
         <div class="divider text-xs text-base-content/40 my-0">or</div>
 
         <!-- Google -->
-        <button type="button" class="btn btn-outline w-full text-sm font-medium gap-2 border-base-300 text-base-content">
+        <button type="button" class="btn btn-outline w-full text-sm font-medium gap-2 border-base-300 text-base-content" onclick={handleGoogle}>
           <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
             <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
             <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
@@ -102,6 +144,17 @@
         </button>
 
       </form>
+
+      {#if error}
+          <div class="flex items-start gap-2 bg-error/5 text-error rounded-xl px-4 py-3 text-sm mt-5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 flex-shrink-0">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>{error}</span>
+          </div>
+        {/if}
     </div>
 
     <!-- Footer -->

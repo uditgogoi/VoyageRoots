@@ -1,5 +1,6 @@
 <script>
   import { page } from '$app/state';
+import { goto, invalidateAll } from '$app/navigation';
 
   let collapsed = $state(false);
 
@@ -30,6 +31,12 @@
   function isActive(href) {
     if (href === '/admin') return page.url.pathname === '/admin';
     return page.url.pathname.startsWith(href);
+  }
+
+  async function handleLogout() {
+    await fetch('/auth/logout', { method: 'POST' });
+    await invalidateAll();
+     goto('/');
   }
 </script>
 
@@ -96,8 +103,19 @@
           <p class="text-xs text-white/40 truncate">admin@voyageroots.in</p>
         </div>
       </div>
+      <button
+        onclick={handleLogout}
+        class="flex items-center gap-2 px-3 py-2 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-xs font-medium"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        Logout
+      </button>
     {/if}
-    <button
+    <!-- <button
       onclick={() => collapsed = !collapsed}
       class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
     >
@@ -106,6 +124,6 @@
         <path d="M15 18l-6-6 6-6"/>
       </svg>
       {#if !collapsed}<span class="text-xs">Collapse</span>{/if}
-    </button>
+    </button> -->
   </div>
 </aside>

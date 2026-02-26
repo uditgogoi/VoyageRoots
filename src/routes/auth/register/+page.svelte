@@ -1,4 +1,7 @@
 <script>
+  import { supabase } from '$lib/supabase';
+  import { goto } from '$app/navigation'; 
+
   let role = $state('user'); // 'user' | 'operator'
   let fullName = $state('');
   let email = $state('');
@@ -7,15 +10,95 @@
   let loading = $state(false);
   let showPassword = $state(false);
   let showConfirm = $state(false);
+  let error= $state('');
+  let googleLoading=$state(false);
+  function parseError(message) {
+  if (message.includes('already registered') || message.includes('User already registered'))
+    return 'An account with this email already exists. Try signing in instead.';
+  if (message.includes('Password should be at least'))
+    return 'Password must be at least 6 characters.';
+  if (message.includes('Unable to validate email'))
+    return 'Please enter a valid email address.';
+  if (message.includes('Email rate limit'))
+    return 'Too many attempts. Please wait a few minutes and try again.';
+  if (message.includes('Network') || message.includes('fetch'))
+    return 'Network error. Please check your connection and try again.';
+  return message; // fallback to raw message
+}
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    loading = true;
-    // TODO: connect Supabase auth
-    // Pass role to profiles table on signup
-    await new Promise(r => setTimeout(r, 1500));
+async function handleSubmit(e) {
+  e.preventDefault();
+  error = '';
+
+  if (password !== confirmPassword) {
+    error = 'Passwords do not match.';
+    return;
+  }
+
+  if (password.length < 6) {
+    error = 'Password must be at least 6 characters.';
+    return;
+  }
+
+  loading = true;
+
+  try {
+    const { data, error: err } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?role=${role}`,
+        data: { full_name: fullName, role }
+      }
+    });
+
+    if (err) {
+      error = parseError(err.message);
+      return;
+    }
+
+    if (data.user) {
+      if (data.session) {
+        // Session exists = email confirmation is OFF → go straight to dashboard
+        if (role === 'operator') goto('/admin');
+        else goto('/user/dashboard');
+      } else {
+        // No session = email confirmation is ON → show confirm page
+        goto(`/auth/confirm-email?email=${encodeURIComponent(email)}`);
+      }
+      // goto(`/auth/confirm-email?email=${encodeURIComponent(email)}`);
+    }
+
+  } catch (e) {
+    console.error('Signup error:', e);
+    error = 'Something went wrong. Please try again.';
+  } finally {
     loading = false;
   }
+}
+
+async function handleGoogle() {
+  error = '';
+  googleLoading = true;
+
+  try {
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?role=${role}`,
+      }
+    });
+
+    if (err) {
+      error = parseError(err.message);
+      googleLoading = false;
+    }
+    // no finally here — page will redirect, so we keep spinner going
+  } catch (e) {
+    error = 'Could not connect to Google. Please try again.';
+    googleLoading = false;
+  }
+}
 </script>
 
 <div class="min-h-screen bg-white flex items-center justify-center px-4 py-12">
@@ -187,15 +270,27 @@
           </span>
         </label>
 
+        {#if error}
+          <div class="flex items-start gap-2 bg-error/5 border border-error/20 text-error rounded-xl px-4 py-3 text-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 flex-shrink-0">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>{error}</span>
+          </div>
+        {/if}
+
         <!-- Submit -->
         <button
           type="submit"
           class="btn w-full rounded-xl mt-1 text-sm font-semibold
             {role === 'operator' ? 'btn-secondary' : 'btn-primary'}"
-          disabled={loading || (confirmPassword && confirmPassword !== password)}
+          disabled={loading || googleLoading || (confirmPassword && confirmPassword !== password)}
         >
           {#if loading}
             <span class="loading loading-spinner loading-sm"></span>
+            Creating your account...
           {:else}
             {role === 'user' ? '🧳 Create Traveler Account' : '🏕️ Create Operator Account'}
           {/if}
@@ -207,15 +302,17 @@
         <!-- Google -->
         <button
           type="button"
+          onclick={handleGoogle}
+          disabled={googleLoading || loading}
           class="btn btn-outline w-full text-sm font-medium gap-2 border-base-300 text-base-content"
         >
-          <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
-            <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
-            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
-          </svg>
-          Continue with Google
+          {#if googleLoading}
+            <span class="loading loading-spinner loading-sm"></span>
+            Connecting to Google...
+          {:else}
+            <!-- your existing Google SVG -->
+            Continue with Google
+          {/if}
         </button>
 
       </form>
